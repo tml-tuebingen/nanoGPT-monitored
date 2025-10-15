@@ -15,6 +15,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+from pytorch_module_monitor import MonitorMixin, monitor_scaled_dot_product_attention
+
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
 
@@ -26,10 +28,11 @@ class LayerNorm(nn.Module):
     def forward(self, input):
         return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)
 
-class CausalSelfAttention(nn.Module):
+class CausalSelfAttention(nn.Module, MonitorMixin): ### Inherit from MonitorMixin
 
     def __init__(self, config):
-        super().__init__()
+        nn.Module.__init__(self)
+        MonitorMixin.__init__(self) ### Initialize MonitorMixin
         assert config.n_embd % config.n_head == 0
         # key, query, value projections for all heads, but in a batch
         self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)
@@ -69,6 +72,20 @@ class CausalSelfAttention(nn.Module):
             att = F.softmax(att, dim=-1)
             att = self.attn_dropout(att)
             y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+
+        ### Monitor the activations of individual attention heads and the entropy of the attention weights
+        if self.is_monitoring:
+            monitor_scaled_dot_product_attention(self.get_module_monitor(), 
+                                                self, 
+                                                q, 
+                                                k, 
+                                                v, 
+                                                attn_mask=None, 
+                                                dropout_p=self.dropout if self.training else 0, 
+                                                is_causal=True, activation = y, 
+                                                is_reference=self.is_reference_module)
+        ### End monitoring code
+
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
 
         # output projection

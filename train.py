@@ -29,6 +29,8 @@ from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPTConfig, GPT
 
+from pytorch_module_monitor import ModuleMonitor, RefinedCoordinateCheck
+
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
 # I/O
@@ -72,6 +74,8 @@ backend = 'nccl' # 'nccl', 'gloo', etc.
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
 compile = True # use PyTorch 2.0 to compile the model to be faster
+### turn the reference model on/off ###
+with_reference_model = True # whether to track metrics against a reference model
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
@@ -192,6 +196,31 @@ if block_size < model.config.block_size:
     model_args['block_size'] = block_size # so that the checkpoint will have the right value
 model.to(device)
 
+### reference model init
+reference_model = None
+if with_reference_model:
+    print("Initializing reference model")
+    reference_model = GPT(gptconf)
+    reference_model.to(device)
+    reference_model.load_state_dict(model.state_dict())
+
+### training monitor setup. we simply track the L2 norm of activations, parameters, gradients
+import logging
+logging.basicConfig(level=logging.INFO) # use DEBUG to debug the monitoring code, INFO for normal use
+training_monitor = ModuleMonitor(monitor_step_fn = lambda iter_num: iter_num % log_interval == 0)
+training_monitor.add_activation_metric("L2norm", lambda activations: torch.linalg.vector_norm(activations, ord=2, dim=-1))
+training_monitor.add_parameter_metric("L2norm", lambda parameters: torch.linalg.vector_norm(parameters.flatten(), ord=2))
+training_monitor.add_gradient_metric("L2norm", lambda gradients: torch.linalg.vector_norm(gradients.flatten(), ord=2))
+training_monitor.set_module(model, excluded_modules=r'^\[root module\]$') # monitor everything except the root module (the model itself)
+
+if with_reference_model:
+    training_monitor.add_activation_difference_metric("L2norm", lambda activations, reference_activations: torch.linalg.vector_norm((activations - reference_activations), ord=2, dim=-1))
+    training_monitor.add_parameter_difference_metric("L2norm", lambda parameters, reference_parameters: torch.linalg.vector_norm((parameters - reference_parameters).flatten(), ord=2))
+    training_monitor.set_reference_module(reference_model)
+
+    # if there is a reference model, we also perform the refined coordinate check from https://arxiv.org/abs/2505.22491
+    coordinate_check = RefinedCoordinateCheck(training_monitor)
+
 # initialize a GradScaler. If enabled=False scaler is a no-op
 scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
 
@@ -265,12 +294,10 @@ while True:
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
         if wandb_log:
             wandb.log({
-                "iter": iter_num,
                 "train/loss": losses['train'],
                 "val/loss": losses['val'],
-                "lr": lr,
-                "mfu": running_mfu*100, # convert to percentage
-            })
+            }, step=iter_num)
+
         if losses['val'] < best_val_loss or always_save_checkpoint:
             best_val_loss = losses['val']
             if iter_num > 0:
@@ -287,9 +314,17 @@ while True:
     if iter_num == 0 and eval_only:
         break
 
+    ### Start monitoring a new gradient step ###
+    training_monitor.begin_step(iter_num)
+
     # forward backward update, with optional gradient accumulation to simulate larger batch size
     # and using the GradScaler if data type is float16
     for micro_step in range(gradient_accumulation_steps):
+        ### Forward pass with the reference model to collect activations
+        if with_reference_model:
+            with torch.no_grad():
+                with ctx:
+                    _ = reference_model(X, Y)          
         if ddp:
             # in DDP training we only need to sync gradients at the last micro step.
             # the official way to do this is with model.no_sync() context manager, but
@@ -303,15 +338,33 @@ while True:
         X, Y = get_batch('train')
         # backward pass, with gradient scaling if training in fp16
         scaler.scale(loss).backward()
+        ### Perform the refined coordinate check ###
+        if with_reference_model:
+            with ctx:
+                coordinate_check.refined_coordinate_check()
+        ### Tell the training monitor that we finished a gradient accumulation step ###
+        training_monitor.after_micro_batch()
+
     # clip the gradient
     if grad_clip != 0.0:
+        ### Monitor gradients before clipping ###
+        training_monitor.monitor_gradients(before_clip=True)
+
         scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+
+    ### Monitor parameters and gradients ###
+    training_monitor.monitor_parameters()
+    training_monitor.monitor_gradients()
+
     # step the optimizer and scaler if training in fp16
     scaler.step(optimizer)
     scaler.update()
     # flush the gradients as soon as we can, no need for this memory anymore
     optimizer.zero_grad(set_to_none=True)
+
+    ### End monitoring the gradient step ###
+    training_monitor.end_step()
 
     # timing and logging
     t1 = time.time()
@@ -325,6 +378,14 @@ while True:
             mfu = raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
             running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
         print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
+        if wandb_log:
+            metrics = {
+                "iter": iter_num,
+                "lr": lr,
+                "mfu": running_mfu*100, # convert to percentage
+            }
+            ### Log all metrics to wandb ###
+            wandb.log({**metrics, **training_monitor.get_step_metrics()}, step=iter_num)
     iter_num += 1
     local_iter_num += 1
 
