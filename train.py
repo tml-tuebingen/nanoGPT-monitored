@@ -207,11 +207,11 @@ if with_reference_model:
 ### training monitor setup. we simply track the L2 norm of activations, parameters, gradients
 import logging
 logging.basicConfig(level=logging.INFO) # use DEBUG to debug the monitoring code, INFO for normal use
-training_monitor = ModuleMonitor(monitor_step_fn = lambda iter_num: iter_num % log_interval == 0)
+training_monitor = ModuleMonitor(monitor_step_fn = lambda iter_num: iter_num % log_interval == 0, excluded_modules_regex=r'^\[root module\]$')
 training_monitor.add_activation_metric("L2norm", lambda activations: torch.linalg.vector_norm(activations, ord=2, dim=-1))
 training_monitor.add_parameter_metric("L2norm", lambda parameters: torch.linalg.vector_norm(parameters.flatten(), ord=2))
 training_monitor.add_gradient_metric("L2norm", lambda gradients: torch.linalg.vector_norm(gradients.flatten(), ord=2))
-training_monitor.set_module(model, excluded_modules=r'^\[root module\]$') # monitor everything except the root module (the model itself)
+training_monitor.set_module(model)
 
 if with_reference_model:
     training_monitor.add_activation_difference_metric("L2norm", lambda activations, reference_activations: torch.linalg.vector_norm((activations - reference_activations), ord=2, dim=-1))
@@ -342,7 +342,7 @@ while True:
         if with_reference_model:
             with ctx:
                 coordinate_check.refined_coordinate_check()
-        ### Tell the training monitor that we finished a gradient accumulation step ###
+        ### Tell the training monitor that we finished a micro batch ###
         training_monitor.after_micro_batch()
 
     # clip the gradient
