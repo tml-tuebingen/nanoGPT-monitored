@@ -1,12 +1,10 @@
 # nanoGPT-monitored
 
-![nanoGPT](assets/nanogpt.jpg)
+A fork of [nanoGPT](https://github.com/karpathy/nanoGPT) with added monitoring of activations, gradients, and parameters throughout training using the [torch-module-monitor](https://github.com/tml-tuebingen/torch-module-monitor). 
 
-A fork of [nanoGPT](https://github.com/karpathy/nanoGPT) with integrated training monitoring using [torch-module-monitor](https://github.com/tml-tuebingen/torch-module-monitor). The simplest, fastest repository for training/finetuning medium-sized GPTs, now with comprehensive metric tracking for activations, gradients, and parameters throughout the training process.
+This repository demonstrates how to integrate the [torch-module-monitor](https://github.com/tml-tuebingen/torch-module-monitor) into an existing codebase.
 
-This repository maintains the clean, readable structure of the original nanoGPT while adding powerful monitoring capabilities. The `train.py` file remains straightforward - approximately ~400 lines including monitoring setup - and reproduces GPT-2 (124M) on OpenWebText, running on a single 8XA100 40GB node in about 4 days of training.
-
-![repro124m](assets/gpt2_124M_loss.png)
+We changed only a few lines of code, marked with "###".
 
 ## What's Different?
 
@@ -14,14 +12,22 @@ This fork integrates [torch-module-monitor](https://github.com/tml-tuebingen/tor
 
 - **Activation, Parameter, and Gradient Monitoring**: Track L2 norms and custom metrics for model internals during training
 - **Reference Model Comparison**: Optional tracking of differences between the training model and a frozen reference model
-- **Refined Coordinate Check**: Implements the validation technique from [this NeurIPS 2025 paper](https://arxiv.org/abs/2505.22491) to verify proper hyperparameter transfer
-- **Seamless W&B Integration**: All metrics automatically logged to Weights & Biases dashboards
-
-The monitoring adds minimal overhead and can be toggled on/off with a simple config flag. Because the code is still simple and readable, it's very easy to hack to your needs, customize metrics, train new models from scratch, or finetune pretrained checkpoints.
+- **Refined Coordinate Check**: Performs the refined coordinate check from [Haas et al. (2025)](https://arxiv.org/abs/2505.22491) 
+- **W&B Integration**: All metrics logged to Weights & Biases dashboards
 
 ## Related Work
 
-This approach complements other nanoGPT research forks like [nanoGPT-mup](https://github.com/EleutherAI/nanoGPT-mup), which implements Maximal Update Parameterization for better hyperparameter transfer. Both projects aim to make neural network training more interpretable and reliable through systematic monitoring and parameterization.
+This repo is inspired by [nanoGPT-mup](https://github.com/EleutherAI/nanoGPT-mup), which implements Maximal Update Parameterization in nanoGPT.
+
+# nanoGPT (Original README)
+
+![nanoGPT](assets/nanogpt.jpg)
+
+The simplest, fastest repository for training/finetuning medium-sized GPTs. It is a rewrite of [minGPT](https://github.com/karpathy/minGPT) that prioritizes teeth over education. Still under active development, but currently the file `train.py` reproduces GPT-2 (124M) on OpenWebText, running on a single 8XA100 40GB node in about 4 days of training. The code itself is plain and readable: `train.py` is a ~300-line boilerplate training loop and `model.py` a ~300-line GPT model definition, which can optionally load the GPT-2 weights from OpenAI. That's it.
+
+![repro124m](assets/gpt2_124M_loss.png)
+
+Because the code is so simple, it is very easy to hack to your needs, train new models from scratch, or finetune pretrained checkpoints (e.g. biggest one currently available as a starting point would be the GPT-2 1.3B model from OpenAI).
 
 ## install
 
