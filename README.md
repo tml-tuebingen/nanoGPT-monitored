@@ -32,7 +32,7 @@ Because the code is so simple, it is very easy to hack to your needs, train new 
 ## install
 
 ```
-pip install torch numpy transformers datasets tiktoken wandb tqdm torch-module-monitor
+pip install torch numpy transformers datasets tiktoken wandb tqdm
 ```
 
 Dependencies:
@@ -42,9 +42,8 @@ Dependencies:
 -  `transformers` for huggingface transformers <3 (to load GPT-2 checkpoints)
 -  `datasets` for huggingface datasets <3 (if you want to download + preprocess OpenWebText)
 -  `tiktoken` for OpenAI's fast BPE code <3
--  `wandb` for logging <3 (highly recommended for viewing monitoring metrics)
+-  `wandb` for optional logging <3
 -  `tqdm` for progress bars <3
--  `torch-module-monitor` for training monitoring <3 (see [integration docs](MONITORING.md))
 
 ## quick start
 
@@ -117,26 +116,6 @@ No relving thee post mose the wear
 Not bad for ~3 minutes on a CPU, for a hint of the right character gestalt. If you're willing to wait longer, feel free to tune the hyperparameters, increase the size of the network, the context length (`--block_size`), the length of training, etc.
 
 Finally, on Apple Silicon Macbooks and with a recent PyTorch version make sure to add `--device=mps` (short for "Metal Performance Shaders"); PyTorch then uses the on-chip GPU that can *significantly* accelerate training (2-3X) and allow you to use larger networks. See [Issue 28](https://github.com/karpathy/nanoGPT/issues/28) for more.
-
-## monitoring your training
-
-One of the key features of this fork is comprehensive training monitoring. By default, the monitoring tracks L2 norms of activations, parameters, and gradients throughout your model. To see these metrics in action, make sure you have W&B logging enabled:
-
-```sh
-python train.py config/train_shakespeare_char.py --wandb_log=True --wandb_project=my-project
-```
-
-This will automatically log detailed metrics to your Weights & Biases dashboard, allowing you to visualize training dynamics in real-time.
-
-**Reference Model Tracking**: By default, the code includes a frozen reference model (`with_reference_model=True`) that tracks how much your model changes during training. This is particularly useful for understanding training stability and performing coordinate checks (see [MONITORING.md](MONITORING.md) for details).
-
-If you want to disable the reference model to save memory:
-
-```sh
-python train.py config/train_shakespeare_char.py --with_reference_model=False
-```
-
-The monitoring adds minimal computational overhead (typically <5% slowdown) and provides invaluable insights into what's happening inside your model during training. For details on how the monitoring is integrated and how to customize metrics, see [MONITORING.md](MONITORING.md).
 
 ## reproducing GPT-2
 
@@ -265,10 +244,5 @@ For more questions/discussions feel free to stop by **#nanoGPT** on Discord:
 
 ## acknowledgements
 
-This repository builds upon the excellent work of:
+All nanoGPT experiments are powered by GPUs on [Lambda labs](https://lambdalabs.com), my favorite Cloud GPU provider. Thank you Lambda labs for sponsoring nanoGPT!
 
-- **[nanoGPT](https://github.com/karpathy/nanoGPT)** by Andrej Karpathy - the foundation for this monitored version
-- **[torch-module-monitor](https://github.com/tml-tuebingen/torch-module-monitor)** by the TML Tübingen group - the monitoring library integrated here
-- **[nanoGPT-mup](https://github.com/EleutherAI/nanoGPT-mup)** by EleutherAI - a related effort exploring better hyperparameter transfer
-
-All nanoGPT experiments are powered by GPUs on [Lambda labs](https://lambdalabs.com). Thank you Lambda labs for sponsoring nanoGPT!
