@@ -29,7 +29,7 @@ from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPTConfig, GPT
 
-from pytorch_module_monitor import ModuleMonitor, RefinedCoordinateCheck
+from torch_module_monitor import ModuleMonitor, RefinedCoordinateCheck
 
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText

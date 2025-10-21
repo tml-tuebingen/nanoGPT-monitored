@@ -15,7 +15,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from pytorch_module_monitor import MonitorMixin, monitor_scaled_dot_product_attention
+from torch_module_monitor import MonitorMixin, monitor_scaled_dot_product_attention
 
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
