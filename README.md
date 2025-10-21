@@ -6,6 +6,8 @@ This repository demonstrates how to integrate the [torch-module-monitor](https:/
 
 We changed only a few lines of code, marked with "###".
 
+View the stats monitored during nanoGPT training [here](https://wandb.ai/public-runs/shakespeare-char/runs/943n8dnt).
+
 ## What's Different?
 
 This fork integrates [torch-module-monitor](https://github.com/tml-tuebingen/torch-module-monitor) to track training dynamics in detail:
